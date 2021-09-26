@@ -1,0 +1,5 @@
+com\showtime\TrackWrapper.class
+com\showtime\ShowtimeBitwigExtension.class
+com\showtime\ShowtimeBitwigExtensionDefinition.class
+com\showtime\ParameterWrapper.class
+com\showtime\DeviceWrapper.class
