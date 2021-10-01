@@ -1,13 +1,12 @@
 package com.showtime;
 
 import com.bitwig.extension.api.util.midi.ShortMidiMessage;
-import com.bitwig.extension.controller.api.*;
 import com.bitwig.extension.controller.ControllerExtension;
+import com.bitwig.extension.controller.api.*;
 import showtime.ShowtimeClient;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 
 public class ShowtimeBitwigExtension extends ControllerExtension
 {
@@ -26,6 +25,8 @@ public class ShowtimeBitwigExtension extends ControllerExtension
    private HashMap<Track, TrackWrapper> mTrackWrappers;
    private HashMap<Device, DeviceWrapper> mDeviceWrappers;
    private HashMap<Parameter, ParameterWrapper> mDeviceParameterWrappers;
+
+   private EventLoop mLoop;
 
    // Constants
    public static int MAX_HARDWARE_ITEMS = 64;
@@ -58,6 +59,9 @@ public class ShowtimeBitwigExtension extends ControllerExtension
       if(autoJoin.get()) {
          host.showPopupNotification("Attempting to connect to Showtime network");
          client = new ShowtimeClient();
+         mLoop = new EventLoop(client, this);
+         getHost().scheduleTask(mLoop::run, 5);
+
          client.init(clientName.get(), true);
          client.auto_join_by_name(serverAddress.get());
          host.showPopupNotification("Connected to server " + serverAddress.get() + ": " + client.is_connected());
@@ -80,6 +84,13 @@ public class ShowtimeBitwigExtension extends ControllerExtension
    @Override
    public void exit()
    {
+      //mLoop.interrupt();
+//      try {
+//         mLoop.join(10);
+//      } catch (InterruptedException e) {
+//         getHost().println(e.toString());
+//      }
+
       if(client != null) {
          client.leave();
          client.destroy();
@@ -137,18 +148,17 @@ public class ShowtimeBitwigExtension extends ControllerExtension
 
          createDeviceParameterPage(proxyDevice);
       }
-
       deviceBank.itemCount().addValueObserver(newValue -> deviceListChanged(proxyTrack, deviceBank));
    }
 
    private void createDeviceParameterPage(Device proxyDevice) {
-      CursorRemoteControlsPage proxyDeviceParameters = proxyDevice.createCursorRemoteControlsPage(MAX_HARDWARE_ITEMS);
+
+      CursorRemoteControlsPage proxyDeviceParameters = proxyDevice.createCursorRemoteControlsPage("params1", MAX_HARDWARE_ITEMS, "");
       proxyDeviceParameters.pageCount().markInterested();
       proxyDeviceParameters.pageNames().markInterested();
       proxyDeviceParameters.selectedPageIndex().markInterested();
       proxyDeviceParameters.hasNext().markInterested();
       proxyDeviceParameters.hasPrevious().markInterested();
-
       proxyDevice.addDirectParameterIdObserver(params -> this.parameterListChanged(proxyDevice, proxyDeviceParameters, params));
 
       for(int idx = 0; idx < proxyDeviceParameters.getParameterCount(); ++idx){
@@ -205,6 +215,13 @@ public class ShowtimeBitwigExtension extends ControllerExtension
 
    private void parameterValueChanged(Device proxyDevice, RemoteControl proxyParameter) {
       getHost().println(proxyParameter.name().get() + " changed to " + proxyParameter.value().get());
+      ParameterWrapper paramWrapper = mDeviceParameterWrappers.get(proxyParameter);
+      if (paramWrapper != null){
+         paramWrapper.output.append_float((float)proxyParameter.value().get());
+         paramWrapper.output.fire();
+      } else {
+         getHost().println("Could't find wrapper for parameter " + proxyParameter.name().get());
+      }
    }
 
    private void deviceListChanged(Track proxyTrack, DeviceBank bank) {
